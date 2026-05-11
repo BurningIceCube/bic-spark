@@ -14,11 +14,11 @@
     "namespace",
     "logger"
   ],
-  "author": "",
+  "author": "BurningIceCube",
   "license": "ISC",
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-org/bic-spark.git"
+    "url": "https://github.com/BurningIceCube/bic-spark.git"
   },
   "engines": {
     "node": ">=18"
@@ -49,11 +49,9 @@
   "peerDependencies": {
     "eventemitter3": "^5.0.4"
   },
-  "dependencies": {
-    "eventemitter3": "^5.0.4"
-  },
   "devDependencies": {
-    "@types/node": "^25.6.2",
+    "@types/node": "^22.0.0",
+    "eventemitter3": "^5.0.4",
     "@vitest/coverage-v8": "^4.1.5",
     "loglayer": "^9.1.0",
     "tsup": "^8.5.1",

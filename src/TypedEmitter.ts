@@ -108,7 +108,14 @@ export class Spark<TEvents extends EventMap = EventMap> {
         result = this.ee.emit(event, ...args);
         return;
       }
-      mws[index](args, () => run(index + 1));
+
+      let nextCalled = false;
+      const next = (): void => {
+        nextCalled = true;
+      };
+
+      mws[index](args, next);
+      if (nextCalled) run(index + 1);
     };
 
     run(0);

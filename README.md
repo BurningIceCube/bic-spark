@@ -7,10 +7,10 @@
 ## Installation
 
 ```bash
-pnpm add bic-spark
+pnpm add bic-spark eventemitter3
 ```
 
-> `eventemitter3` ships as a bundled dependency — no separate install needed.
+> `eventemitter3` is a peer dependency — install it alongside `bic-spark`.
 
 ---
 
