@@ -10,6 +10,8 @@
 pnpm add bic-spark
 ```
 
+> `eventemitter3` ships as a bundled dependency — no separate install needed.
+
 ---
 
 ## Quick start

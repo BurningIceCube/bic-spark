@@ -1,41 +1,57 @@
 {
   "name": "bic-spark",
   "version": "0.1.0",
-  "description": "Typed EventEmitter3 wrapper with history, replay, namespacing, async, and middleware.",
+  "description": "Typed EventEmitter3 wrapper with history, replay, namespacing, async middleware, and logging.",
+  "keywords": [
+    "eventemitter",
+    "eventemitter3",
+    "typed",
+    "typescript",
+    "events",
+    "middleware",
+    "history",
+    "replay",
+    "namespace",
+    "logger"
+  ],
+  "author": "",
+  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/bic-spark.git"
+  },
+  "engines": {
+    "node": ">=18"
+  },
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs",
-      "types": "./dist/index.d.ts"
+      "types":   "./dist/index.d.ts",
+      "import":  "./dist/index.js",
+      "require": "./dist/index.cjs"
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
-    "build": "tsup src/index.ts --format cjs,esm --dts",
-    "test": "vitest run",
-    "test:watch": "vitest watch",
-    "test:coverage": "vitest run --coverage",
-    "typecheck": "tsc --noEmit"
+    "build":          "tsup",
+    "typecheck":      "tsc --noEmit",
+    "test":           "vitest run",
+    "test:watch":     "vitest watch",
+    "test:coverage":  "vitest run --coverage",
+    "prepublishOnly": "pnpm test && pnpm typecheck && pnpm build"
   },
   "peerDependencies": {
     "eventemitter3": "^5.0.4"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "devEngines": {
-    "packageManager": {
-      "name": "pnpm",
-      "version": "^11.0.9",
-      "onFail": "download"
-    }
+  "dependencies": {
+    "eventemitter3": "^5.0.4"
   },
-  "type": "module",
   "devDependencies": {
     "@types/node": "^25.6.2",
     "@vitest/coverage-v8": "^4.1.5",
@@ -44,7 +60,12 @@
     "typescript": "^6.0.3",
     "vitest": "^4.1.5"
   },
-  "dependencies": {
-    "eventemitter3": "^5.0.4"
-  }
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "^11.0.9",
+      "onFail": "download"
+    }
+  },
+  "type": "module"
 }
