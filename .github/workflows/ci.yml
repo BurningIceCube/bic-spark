@@ -35,7 +35,7 @@ jobs:
           cache: "pnpm"
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile --allow-build=esbuild   # ← added here
+        run: pnpm install --frozen-lockfile
 
       - name: Type-check
         run: pnpm typecheck
@@ -63,7 +63,7 @@ jobs:
           cache: "pnpm"
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile --allow-build=esbuild   # ← added here
+        run: pnpm install --frozen-lockfile
 
       - name: Build
         run: pnpm build
