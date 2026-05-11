@@ -1,5 +1,8 @@
 # bic-spark
 
+[![npm version](https://img.shields.io/npm/v/bic-spark)](https://www.npmjs.com/package/bic-spark)
+[![npm downloads](https://img.shields.io/npm/dm/bic-spark)](https://www.npmjs.com/package/bic-spark)
+
 > A typed [EventEmitter3](https://github.com/primus/eventemitter3) wrapper that adds **history**, **replay**, **middleware**, **namespacing**, and **logging** — with full TypeScript inference.
 
 ---
