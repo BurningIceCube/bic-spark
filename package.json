@@ -21,7 +21,7 @@
     "url": "https://github.com/BurningIceCube/bic-spark.git"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
