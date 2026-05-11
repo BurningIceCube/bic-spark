@@ -10,9 +10,6 @@
 pnpm add bic-spark
 ```
 
-> `eventemitter3` is a bundled dependency — no separate install needed.  
-> It is also declared as a peer dependency so your project can share a single copy if you use it directly.
-
 ---
 
 ## Quick start
@@ -43,7 +40,7 @@ Creates a new emitter.
 | Option        | Type          | Default     | Description                                                                 |
 |---------------|---------------|-------------|-----------------------------------------------------------------------------|
 | `historySize` | `number`      | `50`        | Max events kept per event name (ring buffer — oldest overwritten when full) |
-| `logger`      | `SparkLogger` | `undefined` | Any `console`-compatible logger; called on `on`, `once`, `off`, and `emit`  |
+| `logger`      | `SparkLogger` | `undefined` | Any `console`-compatible logger. Calls `logger.debug('[spark] <method>: <event>')` on `on`, `once`, `off`, and `emit` / `emitAsync`. |
 
 ```ts
 import { Spark } from 'bic-spark';
@@ -53,6 +50,10 @@ const spark = new Spark<Events>({
   historySize: 200,
   logger: console,   // or a LogLayer instance, pino, winston, etc.
 });
+
+// Every call produces a debug line such as:
+// [spark] on: user:login
+// [spark] emit: user:login
 ```
 
 ---
@@ -100,6 +101,8 @@ spark.removeAllListeners(); // all events
 spark.listenerCount('user:login'); // 0
 ```
 
+> **Note on prepend methods:** `prependListener` and `prependOnceListener` are not exposed by `Spark`. Listener ordering is append-only (first registered, first called). If you need a listener to run first, register it before all others.
+
 ---
 
 ### Emitting
@@ -143,7 +146,7 @@ const notified = await spark.emitAsync('save', payload);
 
 #### `.use(event, middleware) → this`
 
-Register a synchronous middleware for an event. Middleware functions run in registration order **before** listeners are notified.
+Register middleware for an event. Middleware functions run in registration order **before** listeners are notified.
 
 ```ts
 // Signature
