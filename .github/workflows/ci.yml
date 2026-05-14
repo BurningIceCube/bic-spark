@@ -49,8 +49,9 @@ jobs:
 
   coverage:
     name: Coverage Badge
+    needs: test
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && needs.test.result == 'success'
     permissions:
       contents: write
 
