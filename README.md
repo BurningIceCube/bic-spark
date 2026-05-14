@@ -360,4 +360,4 @@ import type {
 
 ## License
 
-ISC
+MIT
