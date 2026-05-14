@@ -16,5 +16,6 @@ export type {
   Middleware,
   SparkLogger,
   SparkOptions,
+  ListenerOptions
 } from './types.js';
 
