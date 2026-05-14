@@ -77,7 +77,7 @@ jobs:
         run: pnpm test:coverage
 
       - name: Generate badge
-        uses: jaywcjlove/coverage-badges-action@998665f7962b1a3935ba8c3e786171a99436e5d1
+        uses: jaywcjlove/coverage-badges-cli@998665f7962b1a3935ba8c3e786171a99436e5d1
         with:
           output: badges/coverage.svg
 
