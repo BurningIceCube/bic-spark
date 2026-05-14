@@ -3,8 +3,12 @@ name: CI
 on:
   push:
     branches: ["main", "master"]
+    paths-ignore:
+      - "**/*.md"
   pull_request:
     branches: ["main", "master"]
+    paths-ignore:
+      - "**/*.md"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -42,6 +46,46 @@ jobs:
 
       - name: Run tests
         run: pnpm test
+
+  coverage:
+    name: Coverage Badge
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && needs.test.result == 'success'
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run coverage
+        run: pnpm test:coverage
+
+      - name: Generate badge
+        uses: jaywcjlove/coverage-badges-action@998665f7962b1a3935ba8c3e786171a99436e5d1
+        with:
+          output: badges/coverage.svg
+
+      - name: Commit badge
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: update coverage badge [skip ci]"
+          file_pattern: badges/coverage.svg
 
   build:
     name: Build Package
