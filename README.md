@@ -364,6 +364,27 @@ import type {
 
 ---
 
+## Bounty board / TODO
+
+### 🟢 Easy
+- [ ] Add a bug report issue template alongside the existing feature request template
+
+### 🟡 Medium
+- [ ] Wildcard subscriptions — `spark.on('user:*', fn)` matching all events under a namespace prefix
+- [ ] Debounce / throttle helpers — `spark.onDebounce(event, fn, ms)` and `spark.onThrottle(event, fn, ms)`
+- [ ] Pausable emitter — `spark.pause()` queues emissions; `spark.resume()` flushes them in order
+- [ ] Diagnostics — `spark.stats(event?)` returning emit count, listener count, and last-emitted timestamp
+- [x] Priority listeners — `spark.on(event, fn, { priority: 10 })` where higher priority fires first
+- [ ] Typed event schemas — accept a Zod schema per event, validate payloads at emit time in dev, stripped in production
+- [ ] Scoped history / sessions — `spark.startSession()` groups related events by correlation ID for ordered replay
+
+### 🔴 Hard
+- [ ] Plugin system — `spark.use(plugin)` bundling middleware + listeners as a reusable instance-level unit
+- [ ] Cross-window / worker adapter — forward events over `postMessage` to iframes or Web Workers
+- [ ] Retry middleware factory — `withRetry(n, delayMs)` for retrying failed async emissions
+- [ ] Cancellable events — listeners receive a `control` object; `control.cancel(reason)` stops the pipeline; `emitAsync` returns `{ cancelled, reason }`
+- [ ] Event pipeline / chaining — `spark.definePipeline('move', [...])` declares a named sequence of events with repeat support and automatic cancellation propagation
+
 ## License
 
 MIT
