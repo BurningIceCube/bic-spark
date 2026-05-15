@@ -17,6 +17,17 @@ export interface EventRecord<TArgs extends any[] = any[]> {
 /** A strongly-typed event listener. */
 export type Listener<TArgs extends any[]> = (...args: TArgs) => void;
 
+/** Options accepted by `.on()` and `.once()`. */
+export interface ListenerOptions {
+  /**
+   * Listeners with a higher priority value are called before those with a lower value.
+   * Listeners registered without a priority (or with the same priority) are called in
+   * registration order within that priority group.
+   * @default undefined  (no priority — appended after all priority listeners)
+   */
+  priority?: number;
+}
+
 /**
  * A middleware function for a single event.
  * Call `next()` to continue the chain; omit it to cancel the emission.

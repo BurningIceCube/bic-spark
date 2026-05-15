@@ -66,20 +66,22 @@ const spark = new Spark<Events>({
 
 ### Subscribing
 
-#### `.on(event, listener) → this`
+#### `.on(event, listener, options?) → this`
 
-Register a persistent listener.
+Register a persistent listener. Pass an optional `options.priority` (higher = called first).
 
 ```ts
-spark.on('user:login', id => console.log(id));
+spark.on('user:login', handlerA);                        // no priority — appended after all priority listeners
+spark.on('user:login', handlerB, { priority: 10 });      // runs before handlerA
+spark.on('user:login', handlerC, { priority: 10 });      // same priority as handlerB — called after handlerB (registration order)
 ```
 
 #### `.once(event, listener) → this`
 
-Register a listener that fires **once** and then removes itself.
+Register a listener that fires once and then removes itself. Accepts the same options.priority as .on().
 
 ```ts
-spark.once('user:login', id => console.log('first login:', id));
+spark.once('user:login', id => console.log('first login:', id), { priority: 5 });
 ```
 
 #### `.off(event, listener) → this`
@@ -107,7 +109,9 @@ spark.removeAllListeners(); // all events
 spark.listenerCount('user:login'); // 0
 ```
 
-> **Note on prepend methods:** `prependListener` and `prependOnceListener` are not exposed by `Spark`. Listener ordering is append-only (first registered, first called). If you need a listener to run first, register it before all others.
+> **Listener ordering:** Listeners with a higher `priority` value are called before those with a lower value.
+> Listeners sharing the same priority (or registered without a priority) are called in registration order.
+> Priority listeners are always called before non-priority listeners for the same event.
 
 ---
 
@@ -350,6 +354,7 @@ import type {
   EventMap,      // Record<string, any[]>
   EventRecord,   // { event, args, timestamp }
   Listener,      // (...args) => void
+  ListenerOptions, // { priority }
   Middleware,    // (args, next) => void
   SparkLogger,   // { debug, info, warn, error }
   SparkOptions,  // { historySize?, logger? }

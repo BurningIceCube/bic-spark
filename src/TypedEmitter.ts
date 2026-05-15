@@ -4,9 +4,16 @@ import type {
   EventMap,
   EventRecord,
   Listener,
+  ListenerOptions,
   Middleware,
   SparkOptions,
 } from './types.js';
+
+interface PriorityEntry<TArgs extends any[]> {
+  priority: number;
+  listener: Listener<TArgs>;
+  once: boolean;
+}
 
 /**
  * `Spark` — a typed EventEmitter3 wrapper with history, replay, and middleware.
@@ -25,6 +32,7 @@ export class Spark<TEvents extends EventMap = EventMap> {
   private readonly ee: EventEmitter;
   private readonly history: Map<string, RingBuffer<EventRecord>>;
   private readonly middlewares: Map<string, Middleware<any>[]>;
+  private readonly priorityListeners: Map<string, PriorityEntry<any>[]>;
   private readonly historySize: number;
   private readonly logger: SparkOptions['logger'];
 
@@ -32,6 +40,7 @@ export class Spark<TEvents extends EventMap = EventMap> {
     this.ee = new EventEmitter();
     this.history = new Map();
     this.middlewares = new Map();
+    this.priorityListeners = new Map();
     this.historySize = options.historySize ?? 50;
     this.logger = options.logger;
   }
@@ -41,20 +50,30 @@ export class Spark<TEvents extends EventMap = EventMap> {
   /** Subscribe to an event. Returns `this` for chaining. */
   on<K extends keyof TEvents & string>(
     event: K,
-    listener: Listener<TEvents[K]>
+    listener: Listener<TEvents[K]>,
+    options?: ListenerOptions
   ): this {
     this.logger?.debug(`[spark] on: ${event}`);
-    this.ee.on(event, listener as (...args: any[]) => void);
+    if (options?.priority !== undefined) {
+      this._addPriorityListener(event, listener, options.priority, false);
+    } else {
+      this.ee.on(event, listener as (...args: any[]) => void);
+    }
     return this;
   }
 
   /** Subscribe once; the listener is removed after its first invocation. */
   once<K extends keyof TEvents & string>(
     event: K,
-    listener: Listener<TEvents[K]>
+    listener: Listener<TEvents[K]>,
+    options?: ListenerOptions
   ): this {
     this.logger?.debug(`[spark] once: ${event}`);
-    this.ee.once(event, listener as (...args: any[]) => void);
+    if (options?.priority !== undefined) {
+      this._addPriorityListener(event, listener, options.priority, true);
+    } else {
+      this.ee.once(event, listener as (...args: any[]) => void);
+    }
     return this;
   }
 
@@ -65,6 +84,12 @@ export class Spark<TEvents extends EventMap = EventMap> {
   ): this {
     this.logger?.debug(`[spark] off: ${event}`);
     this.ee.off(event, listener as (...args: any[]) => void);
+    // Also remove from priority store if present
+    const entries = this.priorityListeners.get(event);
+    if (entries) {
+      const idx = entries.findIndex(e => e.listener === listener);
+      if (idx !== -1) entries.splice(idx, 1);
+    }
     return this;
   }
 
@@ -72,15 +97,20 @@ export class Spark<TEvents extends EventMap = EventMap> {
   removeAllListeners<K extends keyof TEvents & string>(event?: K): this {
     if (event) {
       this.ee.removeAllListeners(event);
+      this.priorityListeners.delete(event);
     } else {
       this.ee.removeAllListeners();
+      this.priorityListeners.clear();
     }
     return this;
   }
 
   /** Number of listeners currently attached to an event. */
   listenerCount<K extends keyof TEvents & string>(event: K): number {
-    return this.ee.listenerCount(event);
+    return (
+      this.ee.listenerCount(event) +
+      (this.priorityListeners.get(event)?.length ?? 0)
+    );
   }
 
   // ─── Emit ─────────────────────────────────────────────────────────────────
@@ -98,22 +128,16 @@ export class Spark<TEvents extends EventMap = EventMap> {
 
     const run = (index: number): void => {
       if (index >= mws.length) {
-        // Persist in history before notifying listeners
-        this.getOrCreateBuffer(event).push({
-          event,
-          args,
-          timestamp: Date.now(),
-        });
+        this.getOrCreateBuffer(event).push({ event, args, timestamp: Date.now() });
         this.logger?.debug(`[spark] emit: ${event}`);
-        result = this.ee.emit(event, ...args);
+        const priorityFired = this._dispatchPriorityListeners(event, args);
+        const eeFired = this.ee.emit(event, ...args);
+        result = priorityFired || eeFired;
         return;
       }
 
       let nextCalled = false;
-      const next = (): void => {
-        nextCalled = true;
-      };
-
+      const next = (): void => { nextCalled = true; };
       mws[index](args, next);
       if (nextCalled) run(index + 1);
     };
@@ -212,7 +236,9 @@ export class Spark<TEvents extends EventMap = EventMap> {
           timestamp: Date.now(),
         });
         this.logger?.debug(`[spark] emit: ${event}`);
-        result = this.ee.emit(event, ...args);
+        const priorityFired = this._dispatchPriorityListeners(event, args);
+        const eeFired = this.ee.emit(event, ...args);
+        result = priorityFired || eeFired;
         return;
       }
 
@@ -240,6 +266,45 @@ export class Spark<TEvents extends EventMap = EventMap> {
       this.history.set(event, buf);
     }
     return buf;
+  }
+
+  private _addPriorityListener(
+    event: string,
+    listener: Listener<any>,
+    priority: number,
+    once: boolean
+  ): void {
+    const entries: PriorityEntry<any>[] = this.priorityListeners.get(event) ?? [];
+    entries.push({ priority, listener, once });
+    // Keep sorted: higher priority first; stable via splice position
+    entries.sort((a, b) => b.priority - a.priority);
+    this.priorityListeners.set(event, entries);
+  }
+
+  /**
+   * Calls all priority listeners for the event in sorted order (highest priority first).
+   * Removes `once` entries after invocation.
+   * Returns `true` if at least one listener was called.
+   */
+  private _dispatchPriorityListeners(event: string, args: any[]): boolean {
+    const entries = this.priorityListeners.get(event);
+    if (!entries || entries.length === 0) return false;
+
+    // Snapshot to handle mutations (once removals) safely
+    const snapshot = entries.slice();
+    const toRemove: PriorityEntry<any>[] = [];
+
+    for (const entry of snapshot) {
+      entry.listener(...args);
+      if (entry.once) toRemove.push(entry);
+    }
+
+    for (const entry of toRemove) {
+      const idx = entries.indexOf(entry);
+      if (idx !== -1) entries.splice(idx, 1);
+    }
+
+    return true;
   }
 }
 
