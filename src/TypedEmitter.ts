@@ -273,7 +273,7 @@ export class Spark<TEvents extends EventMap = EventMap> {
     listener: Listener<any>,
     priority: number,
     once: boolean
-  ); void {
+  ): void {
     const entries: PriorityEntry<any>[] = this.priorityListeners.get(event) ?? [];
     entries.push({ priority, listener, once });
     // Keep sorted: higher priority first; stable via splice position

@@ -74,6 +74,7 @@ Register a persistent listener. Pass an optional `options.priority` (higher = ca
 spark.on('user:login', handlerA);                        // no priority — appended after all priority listeners
 spark.on('user:login', handlerB, { priority: 10 });      // runs before handlerA
 spark.on('user:login', handlerC, { priority: 10 });      // same priority as handlerB — called after handlerB (registration order)
+```
 
 #### `.once(event, listener) → this`
 
