@@ -367,10 +367,10 @@ import type {
 ## Bounty board / TODO
 
 ### 🟢 Easy
-- [ ] Add a bug report issue template alongside the existing feature request template
+- [x] Add a bug report issue template alongside the existing feature request template
 
 ### 🟡 Medium
-- [ ] Wildcard subscriptions — `spark.on('user:*', fn)` matching all events under a namespace prefix
+- [x] Wildcard subscriptions — `spark.on('user:*', fn)` matching all events under a namespace prefix
 - [ ] Debounce / throttle helpers — `spark.onDebounce(event, fn, ms)` and `spark.onThrottle(event, fn, ms)`
 - [ ] Pausable emitter — `spark.pause()` queues emissions; `spark.resume()` flushes them in order
 - [ ] Diagnostics — `spark.stats(event?)` returning emit count, listener count, and last-emitted timestamp
