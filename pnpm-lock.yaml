@@ -197,6 +197,7 @@ snapshots:
   pnpm@11.1.3: {}
 
 ---
+﻿---
 lockfileVersion: '9.0'
 
 settings:
