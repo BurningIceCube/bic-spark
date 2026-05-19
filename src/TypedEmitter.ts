@@ -15,6 +15,14 @@ interface PriorityEntry<TArgs extends any[]> {
   once: boolean;
 }
 
+interface WildcardEntry {
+  pattern: string;
+  regex: RegExp;
+  listener: Listener<any>;
+  once: boolean;
+  priority?: number;
+}
+
 /**
  * `Spark` — a typed EventEmitter3 wrapper with history, replay, and middleware.
  *
@@ -33,6 +41,7 @@ export class Spark<TEvents extends EventMap = EventMap> {
   private readonly history: Map<string, RingBuffer<EventRecord>>;
   private readonly middlewares: Map<string, Middleware<any>[]>;
   private readonly priorityListeners: Map<string, PriorityEntry<any>[]>;
+  private readonly wildcardListeners: WildcardEntry[];
   private readonly historySize: number;
   private readonly logger: SparkOptions['logger'];
 
@@ -41,6 +50,7 @@ export class Spark<TEvents extends EventMap = EventMap> {
     this.history = new Map();
     this.middlewares = new Map();
     this.priorityListeners = new Map();
+    this.wildcardListeners = [];
     this.historySize = options.historySize ?? 50;
     this.logger = options.logger;
   }
@@ -54,6 +64,10 @@ export class Spark<TEvents extends EventMap = EventMap> {
     options?: ListenerOptions
   ): this {
     this.logger?.debug(`[spark] on: ${event}`);
+    if (event.includes('*')) {
+      this.wildcardListeners.push({ pattern: event, regex: this._wildcardToRegex(event), listener, once: false, priority: options?.priority });
+      return this;
+    }
     if (options?.priority !== undefined) {
       this._addPriorityListener(event, listener, options.priority, false);
     } else {
@@ -69,6 +83,10 @@ export class Spark<TEvents extends EventMap = EventMap> {
     options?: ListenerOptions
   ): this {
     this.logger?.debug(`[spark] once: ${event}`);
+    if (event.includes('*')) {
+      this.wildcardListeners.push({ pattern: event, regex: this._wildcardToRegex(event), listener, once: true, priority: options?.priority });
+      return this;
+    }
     if (options?.priority !== undefined) {
       this._addPriorityListener(event, listener, options.priority, true);
     } else {
@@ -90,6 +108,9 @@ export class Spark<TEvents extends EventMap = EventMap> {
       const idx = entries.findIndex(e => e.listener === listener);
       if (idx !== -1) entries.splice(idx, 1);
     }
+    // Also remove from wildcard listeners if present
+    const wcIdx = this.wildcardListeners.findIndex(e => e.pattern === event && e.listener === listener);
+    if (wcIdx !== -1) this.wildcardListeners.splice(wcIdx, 1);
     return this;
   }
 
@@ -98,9 +119,16 @@ export class Spark<TEvents extends EventMap = EventMap> {
     if (event) {
       this.ee.removeAllListeners(event);
       this.priorityListeners.delete(event);
+      // Remove wildcard entries matching this pattern
+      for (let i = this.wildcardListeners.length - 1; i >= 0; i--) {
+        if (this.wildcardListeners[i].pattern === event) {
+          this.wildcardListeners.splice(i, 1);
+        }
+      }
     } else {
       this.ee.removeAllListeners();
       this.priorityListeners.clear();
+      this.wildcardListeners.length = 0;
     }
     return this;
   }
@@ -132,7 +160,8 @@ export class Spark<TEvents extends EventMap = EventMap> {
         this.logger?.debug(`[spark] emit: ${event}`);
         const priorityFired = this._dispatchPriorityListeners(event, args);
         const eeFired = this.ee.emit(event, ...args);
-        result = priorityFired || eeFired;
+        const wildcardFired = this._dispatchWildcardListeners(event, args);
+        result = priorityFired || eeFired || wildcardFired;
         return;
       }
 
@@ -238,7 +267,8 @@ export class Spark<TEvents extends EventMap = EventMap> {
         this.logger?.debug(`[spark] emit: ${event}`);
         const priorityFired = this._dispatchPriorityListeners(event, args);
         const eeFired = this.ee.emit(event, ...args);
-        result = priorityFired || eeFired;
+        const wildcardFired = this._dispatchWildcardListeners(event, args);
+        result = priorityFired || eeFired || wildcardFired;
         return;
       }
 
@@ -305,6 +335,46 @@ export class Spark<TEvents extends EventMap = EventMap> {
     }
 
     return true;
+  }
+
+  /**
+   * Dispatches wildcard listeners whose pattern matches the emitted event.
+   * Removes `once` entries after invocation.
+   */
+  private _dispatchWildcardListeners(event: string, args: any[]): boolean {
+    const toRemove: number[] = [];
+    let fired = false;
+
+    for (let i = 0; i < this.wildcardListeners.length; i++) {
+      const entry = this.wildcardListeners[i];
+      if (entry.regex.test(event)) {
+        entry.listener(...args);
+        fired = true;
+        if (entry.once) toRemove.push(i);
+      }
+    }
+
+    // Remove once entries in reverse order to preserve indices
+    for (let i = toRemove.length - 1; i >= 0; i--) {
+      this.wildcardListeners.splice(toRemove[i], 1);
+    }
+
+    return fired;
+  }
+
+
+  /**
+   * Converts a wildcard pattern to a RegExp.
+   * - `**` matches any characters (multi-segment, crosses `:` boundaries)
+   * - `*` matches a single segment (anything except `:`)
+   */
+  private _wildcardToRegex(pattern: string): RegExp {
+    const regexStr = '^' + pattern
+      .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+      .replace(/\*\*/g, '\u0000')
+      .replace(/\*/g, '[^:]*')
+      .replace(/\u0000/g, '.*') + '$';
+    return new RegExp(regexStr);
   }
 }
 

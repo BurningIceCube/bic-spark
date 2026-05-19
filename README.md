@@ -84,6 +84,26 @@ Register a listener that fires once and then removes itself. Accepts the same op
 spark.once('user:login', id => console.log('first login:', id), { priority: 5 });
 ```
 
+#### Wildcard subscriptions
+
+Register a listener that fires for events matching a wildcard pattern. Works with `.on()`, `.once()`, and `.off()`.
+
+- `*` matches a **single segment** (anything except `:`)
+- `**` matches **multiple segments** (crosses `:` boundaries)
+
+```t// * — single segment
+spark.on('user:*', fn);          // matches user:login, user:logout
+                                  // does NOT match user:profile:updated
+
+// ** — multi-segment (globstar)
+spark.on('user:**', fn);         // matches user:login, user:profile:updated
+
+// Mid-level wildcards
+spark.on('user:*:deleted', fn);  // matches user:profile:deleted, user:account:deleted
+spark.on('**:error', fn);        // matches db:error, db:conn:error
+spark.on('*:error', fn);         // matches db:error but NOT db:conn:error
+```
+
 #### `.off(event, listener) → this`
 
 Remove a previously registered listener.
@@ -367,10 +387,10 @@ import type {
 ## Bounty board / TODO
 
 ### 🟢 Easy
-- [ ] Add a bug report issue template alongside the existing feature request template
+- [x] Add a bug report issue template alongside the existing feature request template
 
 ### 🟡 Medium
-- [ ] Wildcard subscriptions — `spark.on('user:*', fn)` matching all events under a namespace prefix
+- [x] Wildcard subscriptions — `spark.on('user:*', fn)` matching all events under a namespace prefix
 - [ ] Debounce / throttle helpers — `spark.onDebounce(event, fn, ms)` and `spark.onThrottle(event, fn, ms)`
 - [ ] Pausable emitter — `spark.pause()` queues emissions; `spark.resume()` flushes them in order
 - [ ] Diagnostics — `spark.stats(event?)` returning emit count, listener count, and last-emitted timestamp
