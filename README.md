@@ -86,15 +86,22 @@ spark.once('user:login', id => console.log('first login:', id), { priority: 5 })
 
 #### Wildcard subscriptions
 
-Register a listener that fires for all events matching a prefix pattern (ending with `*`). Works with `.on()`, `.once()`, and `.off()`.
+Register a listener that fires for events matching a wildcard pattern. Works with `.on()`, `.once()`, and `.off()`.
 
-```ts
-// Listen to all 'user:' events
-spark.on('user:*', (...args) => console.log('user event:', args));
+- `*` matches a **single segment** (anything except `:`)
+- `**` matches **multiple segments** (crosses `:` boundaries)
 
-spark.emit('user:login', 'u-42');   // triggers wildcard
-spark.emit('user:logout', 'u-42');  // triggers wildcard
-spark.emit('order:created', 'o-1'); // does NOT trigger wildcard
+```t// * — single segment
+spark.on('user:*', fn);          // matches user:login, user:logout
+                                  // does NOT match user:profile:updated
+
+// ** — multi-segment (globstar)
+spark.on('user:**', fn);         // matches user:login, user:profile:updated
+
+// Mid-level wildcards
+spark.on('user:*:deleted', fn);  // matches user:profile:deleted, user:account:deleted
+spark.on('**:error', fn);        // matches db:error, db:conn:error
+spark.on('*:error', fn);         // matches db:error but NOT db:conn:error
 ```
 
 #### `.off(event, listener) → this`
