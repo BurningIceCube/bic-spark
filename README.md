@@ -43,9 +43,9 @@ spark.emit('user:login', 'u-42');
 
 Creates a new emitter.
 
-| Option        | Type          | Default     | Description                                                                 |
-|---------------|---------------|-------------|-----------------------------------------------------------------------------|
-| `historySize` | `number`      | `50`        | Max events kept per event name (ring buffer — oldest overwritten when full) |
+| Option        | Type          | Default     | Description                                                                                                                          |
+|---------------|---------------|-------------|--------------------------------------------------------------------------------------------------------------------------------------|
+| `historySize` | `number`      | `50`        | Max events kept per event name (ring buffer — oldest overwritten when full)                                                          |
 | `logger`      | `SparkLogger` | `undefined` | Any `console`-compatible logger. Calls `logger.debug('[spark] <method>: <event>')` on `on`, `once`, `off`, and `emit` / `emitAsync`. |
 
 ```ts
@@ -78,7 +78,7 @@ spark.on('user:login', handlerC, { priority: 10 });      // same priority as han
 
 #### `.once(event, listener) → this`
 
-Register a listener that fires once and then removes itself. Accepts the same options.priority as .on().
+Register a listener that fires once and then removes itself. Accepts the same options. priority as .on().
 
 ```ts
 spark.once('user:login', id => console.log('first login:', id), { priority: 5 });
@@ -184,7 +184,7 @@ type Middleware<TArgs extends any[]> = (args: TArgs, next: () => void) => void |
 ```
 
 > **Sync middleware**: call `next()` and return `void`.  
-> **Async middleware**: return a `Promise<void>` and call `next()` inside it — only honoured by `emitAsync`; sync `emit` ignores the returned Promise.
+> **Async middleware**: return a `Promise<void>` and call `next()` inside it — only honored by `emitAsync`; sync `emit` ignores the returned Promise.
 
 - Call `next()` to continue the chain.
 - Omit `next()` to **cancel** the emission (listener is not called, event is not recorded in history).
@@ -311,7 +311,7 @@ buf.clear();
 
 ## Error handling
 
-Spark has no internal `try/catch`. All errors propagate to the caller. The table below shows the exact behaviour for each failure mode — all verified by the test suite.
+Spark has no internal `try/catch`. All errors propagate to the caller. The table below shows the exact behavior for each failure mode — all verified by the test suite.
 
 | Scenario                                 | Method                   | Behaviour                                                                                                                                                                                                          |
 |------------------------------------------|--------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
