@@ -17,7 +17,7 @@ interface PriorityEntry<TArgs extends any[]> {
 
 interface WildcardEntry {
   pattern: string;
-  prefix: string;
+  regex: RegExp;
   listener: Listener<any>;
   once: boolean;
   priority?: number;
@@ -64,9 +64,8 @@ export class Spark<TEvents extends EventMap = EventMap> {
     options?: ListenerOptions
   ): this {
     this.logger?.debug(`[spark] on: ${event}`);
-    if (event.endsWith('*')) {
-      const prefix = event.slice(0, -1);
-      this.wildcardListeners.push({ pattern: event, prefix, listener, once: false, priority: options?.priority });
+    if (event.includes('*')) {
+      this.wildcardListeners.push({ pattern: event, regex: this._wildcardToRegex(event), listener, once: false, priority: options?.priority });
       return this;
     }
     if (options?.priority !== undefined) {
@@ -84,9 +83,8 @@ export class Spark<TEvents extends EventMap = EventMap> {
     options?: ListenerOptions
   ): this {
     this.logger?.debug(`[spark] once: ${event}`);
-    if (event.endsWith('*')) {
-      const prefix = event.slice(0, -1);
-      this.wildcardListeners.push({ pattern: event, prefix, listener, once: true, priority: options?.priority });
+    if (event.includes('*')) {
+      this.wildcardListeners.push({ pattern: event, regex: this._wildcardToRegex(event), listener, once: true, priority: options?.priority });
       return this;
     }
     if (options?.priority !== undefined) {
@@ -340,7 +338,7 @@ export class Spark<TEvents extends EventMap = EventMap> {
   }
 
   /**
-   * Dispatches wildcard listeners whose prefix matches the emitted event.
+   * Dispatches wildcard listeners whose pattern matches the emitted event.
    * Removes `once` entries after invocation.
    */
   private _dispatchWildcardListeners(event: string, args: any[]): boolean {
@@ -349,7 +347,7 @@ export class Spark<TEvents extends EventMap = EventMap> {
 
     for (let i = 0; i < this.wildcardListeners.length; i++) {
       const entry = this.wildcardListeners[i];
-      if (event.startsWith(entry.prefix)) {
+      if (entry.regex.test(event)) {
         entry.listener(...args);
         fired = true;
         if (entry.once) toRemove.push(i);
@@ -362,6 +360,21 @@ export class Spark<TEvents extends EventMap = EventMap> {
     }
 
     return fired;
+  }
+
+
+  /**
+   * Converts a wildcard pattern to a RegExp.
+   * - `**` matches any characters (multi-segment, crosses `:` boundaries)
+   * - `*` matches a single segment (anything except `:`)
+   */
+  private _wildcardToRegex(pattern: string): RegExp {
+    const regexStr = '^' + pattern
+      .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+      .replace(/\*\*/g, '\u0000')
+      .replace(/\*/g, '[^:]*')
+      .replace(/\u0000/g, '.*') + '$';
+    return new RegExp(regexStr);
   }
 }
 
