@@ -84,6 +84,19 @@ Register a listener that fires once and then removes itself. Accepts the same op
 spark.once('user:login', id => console.log('first login:', id), { priority: 5 });
 ```
 
+#### Wildcard subscriptions
+
+Register a listener that fires for all events matching a prefix pattern (ending with `*`). Works with `.on()`, `.once()`, and `.off()`.
+
+```ts
+// Listen to all 'user:' events
+spark.on('user:*', (...args) => console.log('user event:', args));
+
+spark.emit('user:login', 'u-42');   // triggers wildcard
+spark.emit('user:logout', 'u-42');  // triggers wildcard
+spark.emit('order:created', 'o-1'); // does NOT trigger wildcard
+```
+
 #### `.off(event, listener) → this`
 
 Remove a previously registered listener.
