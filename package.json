@@ -1,6 +1,6 @@
 {
   "name": "bic-spark",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "Typed EventEmitter3 wrapper with history, replay, namespacing, async middleware, and logging.",
   "keywords": [
     "eventemitter",
