@@ -1,4 +1,4 @@
-import type { EventMap, EventRecord, Listener, Middleware } from './types.js';
+import type { EventMap, EventRecord, Listener, ListenerOptions, Middleware } from './types.js';
 import type { Spark } from './TypedEmitter.js';
 
 /**
@@ -6,10 +6,14 @@ import type { Spark } from './TypedEmitter.js';
  * All event names are automatically namespaced as `"prefix:event"`.
  */
 export interface NamespacedSpark<TEvents extends EventMap> {
-  on<K extends keyof TEvents & string>(event: K, listener: Listener<TEvents[K]>): this;
-  once<K extends keyof TEvents & string>(event: K, listener: Listener<TEvents[K]>): this;
-  many<K extends keyof TEvents & string>(event: K, n: number, listener: Listener<TEvents[K]>): this;
+  on<K extends keyof TEvents & string>(event: K, listener: Listener<TEvents[K]>, options?: ListenerOptions): this;
+  on(event: string, listener: Listener<any[]>, options?: ListenerOptions): this;
+  once<K extends keyof TEvents & string>(event: K, listener: Listener<TEvents[K]>, options?: ListenerOptions): this;
+  once(event: string, listener: Listener<any[]>, options?: ListenerOptions): this;
+  many<K extends keyof TEvents & string>(event: K, n: number, listener: Listener<TEvents[K]>, options?: ListenerOptions): this;
+  many(event: string, n: number, listener: Listener<any[]>, options?: ListenerOptions): this;
   off<K extends keyof TEvents & string>(event: K, listener: Listener<TEvents[K]>): this;
+  off(event: string, listener: Listener<any[]>): this;
   emit<K extends keyof TEvents & string>(event: K, ...args: TEvents[K]): boolean;
   emitAsync<K extends keyof TEvents & string>(event: K, ...args: TEvents[K]): Promise<boolean>;
   use<K extends keyof TEvents & string>(event: K, middleware: Middleware<TEvents[K]>): this;
@@ -51,23 +55,23 @@ export function createNamespace<
   const ns: NamespacedSpark<TEvents> = {
     prefix,
 
-    on<K extends keyof TEvents & string>(event: K, listener: Listener<TEvents[K]>) {
-      (spark as PrefixedSpark).on(prefixed(event), listener as any);
+    on(event: any, listener: any, options?: ListenerOptions) {
+      (spark as any).on(`${prefix}:${event}`, listener, options);
       return this;
     },
 
-    once<K extends keyof TEvents & string>(event: K, listener: Listener<TEvents[K]>) {
-      (spark as PrefixedSpark).once(prefixed(event), listener as any);
+    once(event: any, listener: any, options?: ListenerOptions) {
+      (spark as any).once(`${prefix}:${event}`, listener, options);
       return this;
     },
 
-    many<K extends keyof TEvents & string>(event: K, n: number, listener: Listener<TEvents[K]>) {
-      (spark as PrefixedSpark).many(prefixed(event), n, listener as any);
+    many(event: any, n: number, listener: any, options?: ListenerOptions) {
+      (spark as any).many(`${prefix}:${event}`, n, listener, options);
       return this;
     },
 
-    off<K extends keyof TEvents & string>(event: K, listener: Listener<TEvents[K]>) {
-      (spark as PrefixedSpark).off(prefixed(event), listener as any);
+    off(event: any, listener: any) {
+      (spark as any).off(`${prefix}:${event}`, listener);
       return this;
     },
 

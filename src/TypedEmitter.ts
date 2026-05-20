@@ -63,11 +63,10 @@ export class Spark<TEvents extends EventMap = EventMap> {
   // ─── Subscription ────────────────────────────────────────────────────────────
 
   /** Subscribe to an event. Returns `this` for chaining. */
-  on<K extends keyof TEvents & string>(
-    event: K,
-    listener: Listener<TEvents[K]>,
-    options?: ListenerOptions
-  ): this {
+  on<K extends keyof TEvents & string>(event: K, listener: Listener<TEvents[K]>, options?: ListenerOptions): this;
+  /** Subscribe to a wildcard pattern (e.g. `'user:*'`, `'user:**'`). */
+  on(event: string, listener: Listener<any[]>, options?: ListenerOptions): this;
+  on(event: any, listener: any, options?: ListenerOptions): this {
     this.logger?.debug(`[spark] on: ${event}`);
     if (event.includes('*')) {
       this.wildcardListeners.push({ pattern: event, regex: this._wildcardToRegex(event), listener, remaining: Infinity, priority: options?.priority });
@@ -82,11 +81,10 @@ export class Spark<TEvents extends EventMap = EventMap> {
   }
 
   /** Subscribe once; the listener is removed after its first invocation. */
-  once<K extends keyof TEvents & string>(
-    event: K,
-    listener: Listener<TEvents[K]>,
-    options?: ListenerOptions
-  ): this {
+  once<K extends keyof TEvents & string>(event: K, listener: Listener<TEvents[K]>, options?: ListenerOptions): this;
+  /** Subscribe once to a wildcard pattern. */
+  once(event: string, listener: Listener<any[]>, options?: ListenerOptions): this;
+  once(event: any, listener: any, options?: ListenerOptions): this {
     this.logger?.debug(`[spark] once: ${event}`);
     return this._manyInternal(event, 1, listener, options);
   }
@@ -95,21 +93,19 @@ export class Spark<TEvents extends EventMap = EventMap> {
    * Subscribe for exactly `n` invocations; the listener is auto-removed after firing `n` times.
    * Passing `n = 1` is equivalent to `.once()`.
    */
-  many<K extends keyof TEvents & string>(
-    event: K,
-    n: number,
-    listener: Listener<TEvents[K]>,
-    options?: ListenerOptions
-  ): this {
+  many<K extends keyof TEvents & string>(event: K, n: number, listener: Listener<TEvents[K]>, options?: ListenerOptions): this;
+  /** Subscribe for exactly `n` invocations on a wildcard pattern. */
+  many(event: string, n: number, listener: Listener<any[]>, options?: ListenerOptions): this;
+  many(event: any, n: number, listener: any, options?: ListenerOptions): this {
     if (n < 1) throw new RangeError(`many() requires n >= 1, got ${n}`);
     this.logger?.debug(`[spark] many(${n}): ${event}`);
     return this._manyInternal(event, n, listener, options);
   }
 
-  private _manyInternal<K extends keyof TEvents & string>(
-    event: K,
+  private _manyInternal(
+    event: string,
     n: number,
-    listener: Listener<TEvents[K]>,
+    listener: Listener<any>,
     options?: ListenerOptions
   ): this {
     if (event.includes('*')) {
@@ -135,10 +131,10 @@ export class Spark<TEvents extends EventMap = EventMap> {
   }
 
   /** Unsubscribe a previously registered listener. */
-  off<K extends keyof TEvents & string>(
-    event: K,
-    listener: Listener<TEvents[K]>
-  ): this {
+  off<K extends keyof TEvents & string>(event: K, listener: Listener<TEvents[K]>): this;
+  /** Unsubscribe a wildcard listener. */
+  off(event: string, listener: Listener<any[]>): this;
+  off(event: any, listener: any): this {
     this.logger?.debug(`[spark] off: ${event}`);
     // Check if there's a many() wrapper for this listener
     const wrapper = this._getManyWrapper(event, listener);
