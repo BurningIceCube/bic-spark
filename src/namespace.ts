@@ -8,6 +8,7 @@ import type { Spark } from './TypedEmitter.js';
 export interface NamespacedSpark<TEvents extends EventMap> {
   on<K extends keyof TEvents & string>(event: K, listener: Listener<TEvents[K]>): this;
   once<K extends keyof TEvents & string>(event: K, listener: Listener<TEvents[K]>): this;
+  many<K extends keyof TEvents & string>(event: K, n: number, listener: Listener<TEvents[K]>): this;
   off<K extends keyof TEvents & string>(event: K, listener: Listener<TEvents[K]>): this;
   emit<K extends keyof TEvents & string>(event: K, ...args: TEvents[K]): boolean;
   emitAsync<K extends keyof TEvents & string>(event: K, ...args: TEvents[K]): Promise<boolean>;
@@ -57,6 +58,11 @@ export function createNamespace<
 
     once<K extends keyof TEvents & string>(event: K, listener: Listener<TEvents[K]>) {
       (spark as PrefixedSpark).once(prefixed(event), listener as any);
+      return this;
+    },
+
+    many<K extends keyof TEvents & string>(event: K, n: number, listener: Listener<TEvents[K]>) {
+      (spark as PrefixedSpark).many(prefixed(event), n, listener as any);
       return this;
     },
 
