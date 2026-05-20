@@ -3,6 +3,7 @@ import { RingBuffer } from './RingBuffer.js';
 import type {
   EventMap,
   EventRecord,
+  AnyListener,
   Listener,
   ListenerOptions,
   Middleware,
@@ -46,6 +47,8 @@ export class Spark<TEvents extends EventMap = EventMap> {
   private readonly wildcardListeners: WildcardEntry[];
   /** Maps original listener → EE wrapper for many() with no priority */
   private readonly manyWrappers: Map<string, Map<Listener<any>, Listener<any>>>;
+  /** Global catch-all listeners registered via onAny() */
+  private readonly anyListeners: AnyListener[];
   private readonly historySize: number;
   private readonly logger: SparkOptions['logger'];
 
@@ -56,6 +59,7 @@ export class Spark<TEvents extends EventMap = EventMap> {
     this.priorityListeners = new Map();
     this.wildcardListeners = [];
     this.manyWrappers = new Map();
+    this.anyListeners = [];
     this.historySize = options.historySize ?? 50;
     this.logger = options.logger;
   }
@@ -173,7 +177,34 @@ export class Spark<TEvents extends EventMap = EventMap> {
       this.priorityListeners.clear();
       this.manyWrappers.clear();
       this.wildcardListeners.length = 0;
+      this.anyListeners.length = 0;
     }
+    return this;
+  }
+
+  /**
+   * Register a global catch-all listener that fires on **every** successfully emitted event.
+   * The listener receives the event name as its first argument followed by all emitted args.
+   *
+   * @example
+   * ```ts
+   * spark.onAny((event, ...args) => console.log(event, args));
+   * spark.emit('user:login', 'u-42'); // logs: "user:login" ["u-42"]
+   * ```
+   */
+  onAny(listener: AnyListener): this {
+    this.logger?.debug('[spark] onAny');
+    this.anyListeners.push(listener);
+    return this;
+  }
+
+  /**
+   * Remove a global catch-all listener previously registered with `.onAny()`.
+   */
+  offAny(listener: AnyListener): this {
+    this.logger?.debug('[spark] offAny');
+    const idx = this.anyListeners.indexOf(listener);
+    if (idx !== -1) this.anyListeners.splice(idx, 1);
     return this;
   }
 
@@ -205,6 +236,7 @@ export class Spark<TEvents extends EventMap = EventMap> {
         const priorityFired = this._dispatchPriorityListeners(event, args);
         const eeFired = this.ee.emit(event, ...args);
         const wildcardFired = this._dispatchWildcardListeners(event, args);
+        this._dispatchAnyListeners(event, args);
         result = priorityFired || eeFired || wildcardFired;
         return;
       }
@@ -312,6 +344,7 @@ export class Spark<TEvents extends EventMap = EventMap> {
         const priorityFired = this._dispatchPriorityListeners(event, args);
         const eeFired = this.ee.emit(event, ...args);
         const wildcardFired = this._dispatchWildcardListeners(event, args);
+        this._dispatchAnyListeners(event, args);
         result = priorityFired || eeFired || wildcardFired;
         return;
       }
@@ -412,6 +445,16 @@ export class Spark<TEvents extends EventMap = EventMap> {
     return fired;
   }
 
+
+  /**
+   * Calls all onAny listeners with the event name + args.
+   * Always fires after the normal dispatch when middleware chain completes.
+   */
+  private _dispatchAnyListeners(event: string, args: any[]): void {
+    for (const listener of this.anyListeners.slice()) {
+      listener(event, ...args);
+    }
+  }
 
   /**
    * Converts a wildcard pattern to a RegExp.

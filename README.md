@@ -46,7 +46,7 @@ Creates a new emitter.
 | Option        | Type          | Default     | Description                                                                                                                                    |
 |---------------|---------------|-------------|------------------------------------------------------------------------------------------------------------------------------------------------|
 | `historySize` | `number`      | `50`        | Max events kept per event name (ring buffer — oldest overwritten when full)                                                                    |
-| `logger`      | `SparkLogger` | `undefined` | Any `console`-compatible logger. Calls `logger.debug('[spark] <method>: <event>')` on `on`, `once`, `many`, `off`, and `emit` / `emitAsync`. |
+| `logger`      | `SparkLogger` | `undefined` | Any `console`-compatible logger. Calls `logger.debug('[spark] <method>: <event>')` on `on`, `once`, `many`, `off`, `onAny`, `offAny`, and `emit` / `emitAsync`. |
 
 ```ts
 import { Spark } from 'bic-spark';
@@ -61,6 +61,7 @@ const spark = new Spark<Events>({
 // [spark] on: user:login
 // [spark] once: user:login
 // [spark] many(3): user:login
+// [spark] onAny
 // [spark] emit: user:login
 ```
 
@@ -273,6 +274,43 @@ spark.replay('user:login', id => console.log('past login:', id));
 
 ---
 
+### Global catch-all
+
+#### `.onAny(listener) → this`
+
+Register a listener that fires on **every** successfully emitted event, regardless of name. The listener receives the event name as its first argument followed by all emitted args.
+
+- Fires **after** normal (named) listeners.
+- Does **not** fire when middleware blocks the emission.
+- Works with both `emit()` and `emitAsync()`.
+
+```ts
+// Signature
+type AnyListener = (event: string, ...args: any[]) => void;
+
+spark.onAny((event, ...args) => {
+  console.log('[audit]', event, args);
+});
+
+spark.emit('user:login', 'u-42');   // logs: [audit] user:login ["u-42"]
+spark.emit('user:logout', 'u-42');  // logs: [audit] user:logout ["u-42"]
+```
+
+#### `.offAny(listener) → this`
+
+Remove a catch-all listener previously registered with `.onAny()`, using the original function reference.
+
+```ts
+const auditor = (event: string, ...args: any[]) => console.log(event, args);
+spark.onAny(auditor);
+// ...later
+spark.offAny(auditor);
+```
+
+> `removeAllListeners()` (called without arguments) also clears all `onAny` listeners.
+
+---
+
 ### Namespaces
 
 #### `createNamespace<TEvents, TPrefix>(spark, prefix) → NamespacedSpark<TEvents>`
@@ -309,7 +347,16 @@ auth.replay('login', handler);
 auth.prefix; // 'auth'
 ```
 
-`NamespacedSpark` exposes the same `on`, `once`, `many`, `off`, `emit`, `emitAsync`, `use`, `getHistory`, and `replay` methods — all scoped to the prefix.
+`NamespacedSpark` exposes the same `on`, `once`, `many`, `off`, `emit`, `emitAsync`, `use`, `getHistory`, `replay`, `onAny`, and `offAny` methods — all scoped to the prefix.
+
+The `onAny` listener on a namespace fires only for events emitted under its prefix, and receives the **un-prefixed** event name:
+
+```ts
+auth.onAny((event, ...args) => {
+  // event is 'login' or 'logout', not 'auth:login' / 'auth:logout'
+  console.log('[auth audit]', event, args);
+});
+```
 
 ---
 
@@ -391,6 +438,7 @@ spark.on('notify', (payload) => {
 
 ```ts
 import type {
+  AnyListener,   // (event: string, ...args: any[]) => void
   EventMap,      // Record<string, any[]>
   EventRecord,   // { event, args, timestamp }
   Listener,      // (...args) => void
@@ -413,7 +461,7 @@ import type {
 - [x] Wildcard subscriptions — `spark.on('user:*', fn)` matching all events under a namespace prefix
 - [ ] Debounce / throttle helpers — `spark.onDebounce(event, fn, ms)` and `spark.onThrottle(event, fn, ms)`
 - [ ] Pausable emitter — `spark.pause()` queues emissions; `spark.resume()` flushes them in order
-- [ ] Diagnostics — `spark.stats(event?)` returning emit count, listener count, and last-emitted timestamp
+- [x] Diagnostics — `spark.onAny((event, ...args) => ...)` global catch-all observer
 - [x] Priority listeners — `spark.on(event, fn, { priority: 10 })` where higher priority fires first
 - [x] TTL listeners — `spark.many(event, n, fn)` fires a listener exactly `n` times then auto-removes (generalises `once`)
 - [ ] Typed event schemas — accept a Zod schema per event, validate payloads at emit time in dev, stripped in production

@@ -10,6 +10,7 @@ export { RingBuffer } from './RingBuffer.js';
 
 // Types
 export type {
+  AnyListener,
   EventMap,
   EventRecord,
   Listener,

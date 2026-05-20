@@ -1,4 +1,4 @@
-import type { EventMap, EventRecord, Listener, ListenerOptions, Middleware } from './types.js';
+import type { AnyListener, EventMap, EventRecord, Listener, ListenerOptions, Middleware } from './types.js';
 import type { Spark } from './TypedEmitter.js';
 
 /**
@@ -19,6 +19,14 @@ export interface NamespacedSpark<TEvents extends EventMap> {
   use<K extends keyof TEvents & string>(event: K, middleware: Middleware<TEvents[K]>): this;
   getHistory<K extends keyof TEvents & string>(event: K): EventRecord<TEvents[K]>[];
   replay<K extends keyof TEvents & string>(event: K, listener: Listener<TEvents[K]>): this;
+  /**
+   * Register a catch-all listener scoped to this namespace.
+   * Fires on every event emitted under the namespace prefix.
+   * The `event` argument passed to the listener is the **un-prefixed** name.
+   */
+  onAny(listener: AnyListener): this;
+  /** Remove a catch-all listener previously registered with `.onAny()`. */
+  offAny(listener: AnyListener): this;
   /** The namespace prefix used by this instance. */
   readonly prefix: string;
 }
@@ -51,6 +59,9 @@ export function createNamespace<
 
   const prefixed = <K extends keyof TEvents & string>(event: K) =>
     `${prefix}:${event}` as `${TPrefix}:${K}`;
+
+  /** Tracks onAny wrappers so offAny can remove the right function from the parent. */
+  const anyWrappers = new Map<AnyListener, AnyListener>();
 
   const ns: NamespacedSpark<TEvents> = {
     prefix,
@@ -94,6 +105,27 @@ export function createNamespace<
 
     replay<K extends keyof TEvents & string>(event: K, listener: Listener<TEvents[K]>) {
       (spark as PrefixedSpark).replay(prefixed(event), listener as any);
+      return this;
+    },
+
+    onAny(listener: AnyListener) {
+      const prefixStr = `${prefix}:`;
+      const wrapper: AnyListener = (event, ...args) => {
+        if (event.startsWith(prefixStr)) {
+          listener(event.slice(prefixStr.length), ...args);
+        }
+      };
+      anyWrappers.set(listener, wrapper);
+      spark.onAny(wrapper);
+      return this;
+    },
+
+    offAny(listener: AnyListener) {
+      const wrapper = anyWrappers.get(listener);
+      if (wrapper) {
+        spark.offAny(wrapper);
+        anyWrappers.delete(listener);
+      }
       return this;
     },
   };
