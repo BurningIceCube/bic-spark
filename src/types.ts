@@ -17,6 +17,12 @@ export interface EventRecord<TArgs extends any[] = any[]> {
 /** A strongly-typed event listener. */
 export type Listener<TArgs extends any[]> = (...args: TArgs) => void;
 
+/**
+ * A global catch-all listener registered via `.onAny()`.
+ * Receives the emitted event name as the first argument followed by all event args.
+ */
+export type AnyListener = (event: string, ...args: any[]) => void;
+
 /** Options accepted by `.on()` and `.once()`. */
 export interface ListenerOptions {
   /**

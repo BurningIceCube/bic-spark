@@ -3,6 +3,7 @@ import { RingBuffer } from './RingBuffer.js';
 import type {
   EventMap,
   EventRecord,
+  AnyListener,
   Listener,
   ListenerOptions,
   Middleware,
@@ -12,14 +13,16 @@ import type {
 interface PriorityEntry<TArgs extends any[]> {
   priority: number;
   listener: Listener<TArgs>;
-  once: boolean;
+  /** Remaining invocations before auto-removal. `Infinity` = persistent. */
+  remaining: number;
 }
 
 interface WildcardEntry {
   pattern: string;
   regex: RegExp;
   listener: Listener<any>;
-  once: boolean;
+  /** Remaining invocations before auto-removal. `Infinity` = persistent. */
+  remaining: number;
   priority?: number;
 }
 
@@ -42,6 +45,10 @@ export class Spark<TEvents extends EventMap = EventMap> {
   private readonly middlewares: Map<string, Middleware<any>[]>;
   private readonly priorityListeners: Map<string, PriorityEntry<any>[]>;
   private readonly wildcardListeners: WildcardEntry[];
+  /** Maps original listener → EE wrapper for many() with no priority */
+  private readonly manyWrappers: Map<string, Map<Listener<any>, Listener<any>>>;
+  /** Global catch-all listeners registered via onAny() */
+  private readonly anyListeners: AnyListener[];
   private readonly historySize: number;
   private readonly logger: SparkOptions['logger'];
 
@@ -51,6 +58,8 @@ export class Spark<TEvents extends EventMap = EventMap> {
     this.middlewares = new Map();
     this.priorityListeners = new Map();
     this.wildcardListeners = [];
+    this.manyWrappers = new Map();
+    this.anyListeners = [];
     this.historySize = options.historySize ?? 50;
     this.logger = options.logger;
   }
@@ -58,18 +67,17 @@ export class Spark<TEvents extends EventMap = EventMap> {
   // ─── Subscription ────────────────────────────────────────────────────────────
 
   /** Subscribe to an event. Returns `this` for chaining. */
-  on<K extends keyof TEvents & string>(
-    event: K,
-    listener: Listener<TEvents[K]>,
-    options?: ListenerOptions
-  ): this {
+  on<K extends keyof TEvents & string>(event: K, listener: Listener<TEvents[K]>, options?: ListenerOptions): this;
+  /** Subscribe to a wildcard pattern (e.g. `'user:*'`, `'user:**'`). */
+  on(event: string, listener: Listener<any[]>, options?: ListenerOptions): this;
+  on(event: any, listener: any, options?: ListenerOptions): this {
     this.logger?.debug(`[spark] on: ${event}`);
     if (event.includes('*')) {
-      this.wildcardListeners.push({ pattern: event, regex: this._wildcardToRegex(event), listener, once: false, priority: options?.priority });
+      this.wildcardListeners.push({ pattern: event, regex: this._wildcardToRegex(event), listener, remaining: Infinity, priority: options?.priority });
       return this;
     }
     if (options?.priority !== undefined) {
-      this._addPriorityListener(event, listener, options.priority, false);
+      this._addPriorityListener(event, listener, options.priority, Infinity);
     } else {
       this.ee.on(event, listener as (...args: any[]) => void);
     }
@@ -77,31 +85,69 @@ export class Spark<TEvents extends EventMap = EventMap> {
   }
 
   /** Subscribe once; the listener is removed after its first invocation. */
-  once<K extends keyof TEvents & string>(
-    event: K,
-    listener: Listener<TEvents[K]>,
+  once<K extends keyof TEvents & string>(event: K, listener: Listener<TEvents[K]>, options?: ListenerOptions): this;
+  /** Subscribe once to a wildcard pattern. */
+  once(event: string, listener: Listener<any[]>, options?: ListenerOptions): this;
+  once(event: any, listener: any, options?: ListenerOptions): this {
+    this.logger?.debug(`[spark] once: ${event}`);
+    return this._manyInternal(event, 1, listener, options);
+  }
+
+  /**
+   * Subscribe for exactly `n` invocations; the listener is auto-removed after firing `n` times.
+   * Passing `n = 1` is equivalent to `.once()`.
+   */
+  many<K extends keyof TEvents & string>(event: K, n: number, listener: Listener<TEvents[K]>, options?: ListenerOptions): this;
+  /** Subscribe for exactly `n` invocations on a wildcard pattern. */
+  many(event: string, n: number, listener: Listener<any[]>, options?: ListenerOptions): this;
+  many(event: any, n: number, listener: any, options?: ListenerOptions): this {
+    if (n < 1) throw new RangeError(`many() requires n >= 1, got ${n}`);
+    this.logger?.debug(`[spark] many(${n}): ${event}`);
+    return this._manyInternal(event, n, listener, options);
+  }
+
+  private _manyInternal(
+    event: string,
+    n: number,
+    listener: Listener<any>,
     options?: ListenerOptions
   ): this {
-    this.logger?.debug(`[spark] once: ${event}`);
     if (event.includes('*')) {
-      this.wildcardListeners.push({ pattern: event, regex: this._wildcardToRegex(event), listener, once: true, priority: options?.priority });
+      this.wildcardListeners.push({ pattern: event, regex: this._wildcardToRegex(event), listener, remaining: n, priority: options?.priority });
       return this;
     }
     if (options?.priority !== undefined) {
-      this._addPriorityListener(event, listener, options.priority, true);
+      this._addPriorityListener(event, listener, options.priority, n);
     } else {
-      this.ee.once(event, listener as (...args: any[]) => void);
+      let count = 0;
+      const wrapper = (...args: any[]): void => {
+        count++;
+        (listener as (...a: any[]) => void)(...args);
+        if (count >= n) {
+          this.ee.off(event, wrapper);
+          this._deleteManyWrapper(event, listener);
+        }
+      };
+      this._storeManyWrapper(event, listener, wrapper);
+      this.ee.on(event, wrapper);
     }
     return this;
   }
 
   /** Unsubscribe a previously registered listener. */
-  off<K extends keyof TEvents & string>(
-    event: K,
-    listener: Listener<TEvents[K]>
-  ): this {
+  off<K extends keyof TEvents & string>(event: K, listener: Listener<TEvents[K]>): this;
+  /** Unsubscribe a wildcard listener. */
+  off(event: string, listener: Listener<any[]>): this;
+  off(event: any, listener: any): this {
     this.logger?.debug(`[spark] off: ${event}`);
-    this.ee.off(event, listener as (...args: any[]) => void);
+    // Check if there's a many() wrapper for this listener
+    const wrapper = this._getManyWrapper(event, listener);
+    if (wrapper) {
+      this.ee.off(event, wrapper);
+      this._deleteManyWrapper(event, listener);
+    } else {
+      this.ee.off(event, listener as (...args: any[]) => void);
+    }
     // Also remove from priority store if present
     const entries = this.priorityListeners.get(event);
     if (entries) {
@@ -119,6 +165,7 @@ export class Spark<TEvents extends EventMap = EventMap> {
     if (event) {
       this.ee.removeAllListeners(event);
       this.priorityListeners.delete(event);
+      this.manyWrappers.delete(event);
       // Remove wildcard entries matching this pattern
       for (let i = this.wildcardListeners.length - 1; i >= 0; i--) {
         if (this.wildcardListeners[i].pattern === event) {
@@ -128,8 +175,36 @@ export class Spark<TEvents extends EventMap = EventMap> {
     } else {
       this.ee.removeAllListeners();
       this.priorityListeners.clear();
+      this.manyWrappers.clear();
       this.wildcardListeners.length = 0;
+      this.anyListeners.length = 0;
     }
+    return this;
+  }
+
+  /**
+   * Register a global catch-all listener that fires on **every** successfully emitted event.
+   * The listener receives the event name as its first argument followed by all emitted args.
+   *
+   * @example
+   * ```ts
+   * spark.onAny((event, ...args) => console.log(event, args));
+   * spark.emit('user:login', 'u-42'); // logs: "user:login" ["u-42"]
+   * ```
+   */
+  onAny(listener: AnyListener): this {
+    this.logger?.debug('[spark] onAny');
+    this.anyListeners.push(listener);
+    return this;
+  }
+
+  /**
+   * Remove a global catch-all listener previously registered with `.onAny()`.
+   */
+  offAny(listener: AnyListener): this {
+    this.logger?.debug('[spark] offAny');
+    const idx = this.anyListeners.indexOf(listener);
+    if (idx !== -1) this.anyListeners.splice(idx, 1);
     return this;
   }
 
@@ -161,6 +236,7 @@ export class Spark<TEvents extends EventMap = EventMap> {
         const priorityFired = this._dispatchPriorityListeners(event, args);
         const eeFired = this.ee.emit(event, ...args);
         const wildcardFired = this._dispatchWildcardListeners(event, args);
+        this._dispatchAnyListeners(event, args);
         result = priorityFired || eeFired || wildcardFired;
         return;
       }
@@ -268,6 +344,7 @@ export class Spark<TEvents extends EventMap = EventMap> {
         const priorityFired = this._dispatchPriorityListeners(event, args);
         const eeFired = this.ee.emit(event, ...args);
         const wildcardFired = this._dispatchWildcardListeners(event, args);
+        this._dispatchAnyListeners(event, args);
         result = priorityFired || eeFired || wildcardFired;
         return;
       }
@@ -302,10 +379,10 @@ export class Spark<TEvents extends EventMap = EventMap> {
     event: string,
     listener: Listener<any>,
     priority: number,
-    once: boolean
+    remaining: number
   ): void {
     const entries: PriorityEntry<any>[] = this.priorityListeners.get(event) ?? [];
-    entries.push({ priority, listener, once });
+    entries.push({ priority, listener, remaining });
     // Keep sorted: higher priority first; stable via splice position
     entries.sort((a, b) => b.priority - a.priority);
     this.priorityListeners.set(event, entries);
@@ -313,20 +390,23 @@ export class Spark<TEvents extends EventMap = EventMap> {
 
   /**
    * Calls all priority listeners for the event in sorted order (highest priority first).
-   * Removes `once` entries after invocation.
+   * Decrements `remaining` and removes entries that reach zero.
    * Returns `true` if at least one listener was called.
    */
   private _dispatchPriorityListeners(event: string, args: any[]): boolean {
     const entries = this.priorityListeners.get(event);
     if (!entries || entries.length === 0) return false;
 
-    // Snapshot to handle mutations (once removals) safely
+    // Snapshot to handle mutations (removals) safely
     const snapshot = entries.slice();
     const toRemove: PriorityEntry<any>[] = [];
 
     for (const entry of snapshot) {
       entry.listener(...args);
-      if (entry.once) toRemove.push(entry);
+      if (entry.remaining !== Infinity) {
+        entry.remaining--;
+        if (entry.remaining <= 0) toRemove.push(entry);
+      }
     }
 
     for (const entry of toRemove) {
@@ -339,7 +419,7 @@ export class Spark<TEvents extends EventMap = EventMap> {
 
   /**
    * Dispatches wildcard listeners whose pattern matches the emitted event.
-   * Removes `once` entries after invocation.
+   * Decrements `remaining` and removes entries that reach zero.
    */
   private _dispatchWildcardListeners(event: string, args: any[]): boolean {
     const toRemove: number[] = [];
@@ -350,11 +430,14 @@ export class Spark<TEvents extends EventMap = EventMap> {
       if (entry.regex.test(event)) {
         entry.listener(...args);
         fired = true;
-        if (entry.once) toRemove.push(i);
+        if (entry.remaining !== Infinity) {
+          entry.remaining--;
+          if (entry.remaining <= 0) toRemove.push(i);
+        }
       }
     }
 
-    // Remove once entries in reverse order to preserve indices
+    // Remove exhausted entries in reverse order to preserve indices
     for (let i = toRemove.length - 1; i >= 0; i--) {
       this.wildcardListeners.splice(toRemove[i], 1);
     }
@@ -362,6 +445,16 @@ export class Spark<TEvents extends EventMap = EventMap> {
     return fired;
   }
 
+
+  /**
+   * Calls all onAny listeners with the event name + args.
+   * Always fires after the normal dispatch when middleware chain completes.
+   */
+  private _dispatchAnyListeners(event: string, args: any[]): void {
+    for (const listener of this.anyListeners.slice()) {
+      listener(event, ...args);
+    }
+  }
 
   /**
    * Converts a wildcard pattern to a RegExp.
@@ -375,6 +468,25 @@ export class Spark<TEvents extends EventMap = EventMap> {
       .replace(/\*/g, '[^:]*')
       .replace(/\u0000/g, '.*') + '$';
     return new RegExp(regexStr);
+  }
+
+  // ─── many() wrapper helpers ───────────────────────────────────────────────
+
+  private _storeManyWrapper(event: string, original: Listener<any>, wrapper: Listener<any>): void {
+    let eventMap = this.manyWrappers.get(event);
+    if (!eventMap) {
+      eventMap = new Map();
+      this.manyWrappers.set(event, eventMap);
+    }
+    eventMap.set(original, wrapper);
+  }
+
+  private _getManyWrapper(event: string, original: Listener<any>): Listener<any> | undefined {
+    return this.manyWrappers.get(event)?.get(original);
+  }
+
+  private _deleteManyWrapper(event: string, original: Listener<any>): void {
+    this.manyWrappers.get(event)?.delete(original);
   }
 }
 
