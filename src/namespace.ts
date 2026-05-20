@@ -63,7 +63,7 @@ export function createNamespace<
   /** Tracks onAny wrappers so offAny can remove the right function from the parent. */
   const anyWrappers = new Map<AnyListener, AnyListener>();
 
-  const ns: NamespacedSpark<TEvents> = {
+  return {
     prefix,
 
     on(event: any, listener: any, options?: ListenerOptions) {
@@ -128,8 +128,6 @@ export function createNamespace<
       }
       return this;
     },
-  };
-
-  return ns;
+  } satisfies NamespacedSpark<TEvents>;
 }
 
